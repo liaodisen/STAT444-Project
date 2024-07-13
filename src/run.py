@@ -9,30 +9,10 @@ from data import Data
 from model import get_model
 from importance import Importance
 from train import train_model
+from result import analyze_results
 import utils
 import shap
 import json
-
-def compute_shap_values(model, X):
-    """Compute SHAP values for the model and dataset X."""
-    explainer = shap.DeepExplainer(model, torch.tensor(X, dtype=torch.float32))
-    shap_values = explainer.shap_values(torch.tensor(X, dtype=torch.float32), check_additivity=False)
-    return np.abs(shap_values).mean(axis=0)
-
-def analyze_results(scores, feature_importances, results_path):
-    mean_score = -1 * scores.mean()
-    std_score = scores.std()
-
-    results = {
-        'mean_squared_error': mean_score,
-        'std_deviation': std_score,
-        'feature_importances': feature_importances
-    }
-
-    with open(results_path, 'w') as f:
-        json.dump(results, f, indent=4)
-    
-    print("Results saved to", results_path)
 
 def main(args):
     data = Data(args.data_path)
@@ -44,7 +24,7 @@ def main(args):
     feature_importance_list = []
 
     if args.model == 'mlp':
-        for seed in range(10):
+        for seed in range(1):
             utils.seed_everything(seed)
             kf = KFold(n_splits=args.cv, shuffle=True, random_state=seed)
             mse_scores = []
@@ -66,12 +46,15 @@ def main(args):
                 r2_scores.append(r2_score_value)
 
                 # Compute SHAP values for the validation set
-                shap_values = compute_shap_values(model, X_val)
+                importance = Importance(model, args.model, feature_names, X=data.X, use_shap=args.use_shap)
+                shap_values = importance.get_feature_importance()
+                if isinstance(shap_values, dict):
+                    shap_values = np.array(list(shap_values.values()))
                 if shap_values.ndim == 2 and shap_values.shape[1] == 1:
                     shap_values = shap_values.reshape(-1)  # Reshape (12, 1) to (12,)
                 all_shap_values += shap_values
 
-            mse_scores_list.append(-1 * mse_scores)
+            mse_scores_list.append(mse_scores)
             r2_scores_list.append(r2_scores)
             feature_importance_list.append(all_shap_values / len(data.X))  # Average over total examples
 
@@ -86,7 +69,7 @@ def main(args):
             r2_scores_list.append(r2_scores)
 
             # Collect feature importances
-            importance = Importance(model, args.model, feature_names)
+            importance = Importance(model, args.model, feature_names, X=data.X, use_shap=args.use_shap)
             feature_importances = importance.get_feature_importance()
             feature_importance_list.append(feature_importances)
 
@@ -115,9 +98,10 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--data_path', type=str, required=True, help='Path to the dataset')
-    parser.add_argument('--model', type=str, required=True, choices=['svm', 'rf', 'mlp'], help='Model to use')
+    parser.add_argument('--model', type=str, required=True, choices=['svm', 'rf', 'mlp', 'linear', 'ridge'], help='Model to use')
     parser.add_argument('--results_path', type=str, required=True, help='Path to save results')
     parser.add_argument('--cv', type=int, default=5, help='Number of cross-validation folds')
+    parser.add_argument('--use_shap', action='store_true', help='Use SHAP values to calculate feature importance')
     args = parser.parse_args()
     
     main(args)
