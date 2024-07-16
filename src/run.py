@@ -9,12 +9,19 @@ from data import Data
 from model import get_model
 from importance import Importance
 from train import train_model
-from result import analyze_results
+from result import analyze_results, plot_shap_summary
 import utils
 import shap
 import json
+import os
 
 def main(args):
+    if args.task == 'train':
+        train_models(args)
+    elif args.task == 'shap':
+        make_shap_graphs(args)
+
+def train_models(args):
     data = Data(args.data_path)
     data.load_data()
     data.scale_and_transform()
@@ -118,8 +125,20 @@ def main(args):
     analyze_results(mean_mse_scores, mean_r2_scores, 
                     avg_shap_feature_importance, avg_other_feature_importance, args.results_path + filename)
 
+def make_shap_graphs(args):
+    data = Data(args.data_path)
+    data.load_data()
+    data.scale_and_transform()
+
+    model = get_model(args.model)
+    model.fit(data.X, data.y)
+
+    os.makedirs(args.results_path, exist_ok=True)
+    plot_shap_summary(model, data.X, output_dir=args.results_path)
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    parser.add_argument('--task', type=str, required=True, choices=['train', 'shap'], help='Task to perform: train models or generate SHAP graphs')
     parser.add_argument('--data_path', type=str, required=True, help='Path to the dataset')
     parser.add_argument('--model', type=str, required=True, choices=['svm', 'rf', 'mlp', 'linear', 'ridge', 'lasso'], help='Model to use')
     parser.add_argument('--results_path', type=str, required=True, help='Path to save results')

@@ -23,7 +23,7 @@ class Importance:
             return self._get_shap_values()
         elif self.model_name == 'mlp' and not self.use_shap:
             return self._get_permutation_importance()
-        elif self.model_name in ['linear', 'ridge'] and self.use_shap:
+        elif self.model_name in ['linear', 'ridge', 'lasso', 'svm'] and self.use_shap:
             return self._get_shap_values()
         elif hasattr(self.model, 'coef_'):
             # For linear models (using coefficients)
@@ -44,6 +44,9 @@ class Importance:
         elif self.model_name in ['linear', 'ridge', 'lasso']:
             explainer = shap.LinearExplainer(self.model, self.X)
             shap_values = explainer.shap_values(self.X)
+        elif self.model_name == 'svm':
+            explainer = shap.KernelExplainer(self.model.predict, shap.sample(self.X, 10))
+            shap_values = explainer.shap_values(shap.sample(self.X, 10))
         else:  # Assume tree-based model for now
             explainer = shap.TreeExplainer(self.model)
             shap_values = explainer.shap_values(self.X)
@@ -63,9 +66,8 @@ class Importance:
         return dict(zip(self.feature_names, self._normalize(perm_importance.detach().numpy().mean(axis=0))))
     
     def _normalize(self, values):
-        """Normalize values to a range between 0 and 1."""
-        min_val = np.min(values)
-        max_val = np.max(values)
-        return (values - min_val) / (max_val - min_val)
+        """Normalize values to a range between 0 and 1, and sum to 1"""
+        total = np.sum(values)
+        return values / total
 
 

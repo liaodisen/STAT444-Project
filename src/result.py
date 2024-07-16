@@ -1,9 +1,11 @@
 from sklearn.metrics import mean_squared_error, r2_score
 import json
 import pandas as pd
+import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 import os
+import shap
 
 def analyze_results(mse_scores, r2_scores, shap_feature_importances, other_feature_importances, results_path):
     mse_mean_score = -1 * mse_scores.mean()
@@ -93,6 +95,11 @@ def plot_CV_scores(results_path, output_dir='plots'):
     plt.savefig(output_path_r2)
     plt.close()
 
+
+def normalize_importances(importance_dict):
+    total = abs(sum(importance_dict.values()))
+    return {k: abs(v) / total for k, v in importance_dict.items()}
+
 def plot_feature_importance(results_path, output_dir='../plots'):
     """
     Plot the feature importance for SHAP and other others for each model.
@@ -112,8 +119,8 @@ def plot_feature_importance(results_path, output_dir='../plots'):
         with open(results_path + f'/{model}_cv5.json', 'r') as f:
             results = json.load(f)
         
-        shap_importances = results['feature_importances']['shap']
-        other_importances = results['feature_importances']['other']
+        shap_importances = normalize_importances(results['feature_importances']['shap'])
+        other_importances = normalize_importances(results['feature_importances']['other'])
 
         # Convert dictionaries to DataFrames
         shap_df = pd.DataFrame(list(shap_importances.items()), columns=['Feature', 'Importance']).sort_values(by='Importance', ascending=False)
@@ -138,6 +145,32 @@ def plot_feature_importance(results_path, output_dir='../plots'):
         output_path_other = os.path.join(output_dir, f'{model}_other_importance.png')
         plt.savefig(output_path_other)
         plt.close()
+
+def plot_shap_summary(model, X, output_dir='../plots'):
+    """
+    Plot SHAP summary plots and dependence plots for the given model.
+    """
+    explainer = shap.Explainer(model, X)
+    shap_values = explainer(X)
+    
+    # Ensure the output directory exists
+    os.makedirs(output_dir, exist_ok=True)
+
+    # SHAP summary plot
+    plt.figure(figsize=(12, 8))
+    shap.summary_plot(shap_values, X, plot_type='bar')
+    output_path_summary = os.path.join(output_dir, f'{model}_shap_summary.png')
+    plt.savefig(output_path_summary)
+    plt.close()
+
+    # SHAP dependence plots for each feature
+    # for feature in self.data.columns:
+    #     plt.figure(figsize=(12, 8))
+    #     shap.dependence_plot(feature, shap_values, X)
+    #     output_path_dependence = os.path.join(output_dir, f'{model}_shap_dependence_{feature}.png')
+    #     plt.savefig(output_path_dependence)
+    #     plt.close()
+
 
 # Example usage:
 plot_CV_scores(results_path='results')
