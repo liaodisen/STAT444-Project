@@ -31,6 +31,8 @@ def get_model(model_name, input_dim=None):
         return linear_model.LinearRegression()
     elif model_name == 'ridge':
         return linear_model.Ridge()
+    elif model_name == 'lasso':
+        return linear_model.Lasso(alpha=0.5)
     else:
         raise ValueError(f"Model {model_name} is not supported.")
     return model

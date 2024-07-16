@@ -21,15 +21,17 @@ def main(args):
     feature_names = data.data.drop(columns=['MEDV', 'B']).columns
     mse_scores_list = []
     r2_scores_list = []
-    feature_importance_list = []
+    shap_feature_importance_list = []
+    other_feature_importance_list = []
 
     if args.model == 'mlp':
-        for seed in range(1):
+        for seed in range(10):
             utils.seed_everything(seed)
             kf = KFold(n_splits=args.cv, shuffle=True, random_state=seed)
             mse_scores = []
             r2_scores = []
             all_shap_values = np.zeros((data.X.shape[1],))
+            all_other_values = np.zeros((data.X.shape[1],))
 
             for train_index, val_index in kf.split(data.X):
                 X_train, X_val = data.X[train_index], data.X[val_index]
@@ -46,7 +48,7 @@ def main(args):
                 r2_scores.append(r2_score_value)
 
                 # Compute SHAP values for the validation set
-                importance = Importance(model, args.model, feature_names, X=data.X, use_shap=args.use_shap)
+                importance = Importance(model, args.model, feature_names, X=data.X, y=data.y, use_shap=True)
                 shap_values = importance.get_feature_importance()
                 if isinstance(shap_values, dict):
                     shap_values = np.array(list(shap_values.values()))
@@ -54,9 +56,19 @@ def main(args):
                     shap_values = shap_values.reshape(-1)  # Reshape (12, 1) to (12,)
                 all_shap_values += shap_values
 
+                # Compute other feature importances
+                importance = Importance(model, args.model, feature_names, X=data.X, y=data.y, use_shap=False)
+                other_values = importance.get_feature_importance()
+                if isinstance(other_values, dict):
+                    other_values = np.array(list(other_values.values()))
+                if other_values.ndim == 2 and other_values.shape[1] == 1:
+                    other_values = other_values.reshape(-1)  # Reshape (12, 1) to (12,)
+                all_other_values += other_values
+
             mse_scores_list.append(mse_scores)
             r2_scores_list.append(r2_scores)
-            feature_importance_list.append(all_shap_values / len(data.X))  # Average over total examples
+            shap_feature_importance_list.append(all_shap_values / len(data.X))  # Average over total examples
+            other_feature_importance_list.append(all_other_values / len(data.X))
 
     else:
         for seed in range(10):
@@ -69,9 +81,13 @@ def main(args):
             r2_scores_list.append(r2_scores)
 
             # Collect feature importances
-            importance = Importance(model, args.model, feature_names, X=data.X, use_shap=args.use_shap)
-            feature_importances = importance.get_feature_importance()
-            feature_importance_list.append(feature_importances)
+            importance = Importance(model, args.model, feature_names, X=data.X, use_shap=True)
+            shap_values = importance.get_feature_importance()
+            shap_feature_importance_list.append(shap_values)
+
+            importance = Importance(model, args.model, feature_names, X=data.X, use_shap=False)
+            other_values = importance.get_feature_importance()
+            other_feature_importance_list.append(other_values)
 
     # Convert lists to numpy arrays for easier averaging
     mse_scores_array = np.array(mse_scores_list)
@@ -82,26 +98,32 @@ def main(args):
     mean_r2_scores = np.mean(r2_scores_array, axis=0)
 
     # Calculate average feature importances
-    avg_feature_importance = {}
+    avg_shap_feature_importance = {}
+    avg_other_feature_importance = {}
     if args.model == 'mlp':
-        avg_shap_values = np.mean(np.array(feature_importance_list), axis=0)
-        avg_feature_importance = dict(zip(feature_names, avg_shap_values))
+        avg_shap_values = np.mean(np.array(shap_feature_importance_list), axis=0)
+        avg_shap_feature_importance = dict(zip(feature_names, avg_shap_values))
+        avg_other_values = np.mean(np.array(other_feature_importance_list), axis=0)
+        avg_other_feature_importance = dict(zip(feature_names, avg_other_values))
     else:
-        if feature_importance_list:
-            for key in feature_importance_list[0]:
-                avg_feature_importance[key] = np.mean([fi[key] for fi in feature_importance_list])
+        if shap_feature_importance_list:
+            for key in shap_feature_importance_list[0]:
+                avg_shap_feature_importance[key] = np.mean([fi[key] for fi in shap_feature_importance_list])
+        if other_feature_importance_list:
+            for key in other_feature_importance_list[0]:
+                avg_other_feature_importance[key] = np.mean([fi[key] for fi in other_feature_importance_list])
 
     filename = f'/{args.model}_cv{args.cv}.json'
     
-    analyze_results(mean_mse_scores, avg_feature_importance, args.results_path + filename)
+    analyze_results(mean_mse_scores, mean_r2_scores, 
+                    avg_shap_feature_importance, avg_other_feature_importance, args.results_path + filename)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--data_path', type=str, required=True, help='Path to the dataset')
-    parser.add_argument('--model', type=str, required=True, choices=['svm', 'rf', 'mlp', 'linear', 'ridge'], help='Model to use')
+    parser.add_argument('--model', type=str, required=True, choices=['svm', 'rf', 'mlp', 'linear', 'ridge', 'lasso'], help='Model to use')
     parser.add_argument('--results_path', type=str, required=True, help='Path to save results')
     parser.add_argument('--cv', type=int, default=5, help='Number of cross-validation folds')
-    parser.add_argument('--use_shap', action='store_true', help='Use SHAP values to calculate feature importance')
     args = parser.parse_args()
     
     main(args)
