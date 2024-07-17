@@ -15,6 +15,7 @@ class Data:
         self.data = pd.read_csv(self.filepath).dropna()
         self.X = self.data.drop(columns=['MEDV', 'B']).to_numpy()
         self.y = self.data['MEDV'].to_numpy()
+        self.features = self.data.drop(columns=['MEDV', 'B']).columns
         print(f"Data loaded from {self.filepath}. Shape: {self.data.shape}")
 
     def get_summary(self):

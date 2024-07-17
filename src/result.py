@@ -5,6 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 import os
+import torch
 import shap
 
 def analyze_results(mse_scores, r2_scores, shap_feature_importances, other_feature_importances, results_path):
@@ -146,23 +147,44 @@ def plot_feature_importance(results_path, output_dir='../plots'):
         plt.savefig(output_path_other)
         plt.close()
 
-def plot_shap_summary(model, X, output_dir='../plots'):
+def plot_shap_summary(model, model_name, feature_names, X, output_dir='../plots'):
     """
     Plot SHAP summary plots and dependence plots for the given model.
     """
-    explainer = shap.Explainer(model, X)
-    shap_values = explainer(X)
+    if isinstance(model, torch.nn.Module):
+        # Convert X into a PyTorch tensor
+        X_tensor = torch.tensor(X, dtype=torch.float32)
+        
+        # Use the DeepExplainer for PyTorch models
+        explainer = shap.DeepExplainer(model, X_tensor)
+        shap_values = explainer.shap_values(X_tensor, check_additivity=False)
+    else:
+        # Use the TreeExplainer or KernelExplainer for other models
+        if model_name == 'rf':
+            explainer = shap.TreeExplainer(model, X)
+            shap_values = explainer.shap_values(X)
     
     # Ensure the output directory exists
     os.makedirs(output_dir, exist_ok=True)
 
     # SHAP summary plot
     plt.figure(figsize=(12, 8))
-    shap.summary_plot(shap_values, X, plot_type='bar')
-    output_path_summary = os.path.join(output_dir, f'{model}_shap_summary.png')
+    if isinstance(model, torch.nn.Module):
+        shap.summary_plot(shap_values, X_tensor.numpy(), plot_type='bar')
+    else:
+        shap.summary_plot(shap_values, X, plot_type='bar')
+    output_path_summary = os.path.join(output_dir, f'{model_name}_shap_summary.png')
     plt.savefig(output_path_summary)
-    plt.close()
 
+    # SHAP force plot for the first instance
+    shap.initjs()
+    if isinstance(model, torch.nn.Module):
+        shap.force_plot(explainer.expected_value, shap_values[0, :], X_tensor[0, :].numpy())
+    else:
+        shap.force_plot(explainer.expected_value, shap_values[0,:], X[0,:], feature_names = feature_names, matplotlib=True, figsize=(50, 10))
+    output_path_force = os.path.join(output_dir, f'{model_name}_shap_force_plot.png')
+    plt.savefig(output_path_force)
+    plt.close()
     # SHAP dependence plots for each feature
     # for feature in self.data.columns:
     #     plt.figure(figsize=(12, 8))

@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import numpy as np
-from sklearn.model_selection import KFold, cross_val_score
+from sklearn.model_selection import KFold, cross_val_score, train_test_split
 from sklearn.metrics import mean_squared_error, r2_score, make_scorer
 from data import Data
 from model import get_model
@@ -130,11 +130,16 @@ def make_shap_graphs(args):
     data.load_data()
     data.scale_and_transform()
 
-    model = get_model(args.model)
-    model.fit(data.X, data.y)
+    if args.model == 'mlp':
+        # Train the model for MLP specifically
+        X_train, X_val, y_train, y_val = train_test_split(data.X, data.y, test_size=0.2, random_state=0)
+        model = train_model(X_train, y_train, X_val, y_val, X_train.shape[1])
+    else:
+        model = get_model(args.model)
+        model.fit(data.X, data.y)
 
     os.makedirs(args.results_path, exist_ok=True)
-    plot_shap_summary(model, data.X, output_dir=args.results_path)
+    plot_shap_summary(model, args.model, data.features, data.X)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
