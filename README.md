@@ -1,5 +1,6 @@
-# Boston Housing Dataset Analysis
+# Spring 2024 STAT444 Final Project: Boston Housing Dataset Analysis
 
+Spring 2024 STAT444 was taught by Professor Alex Stringer, this course focused advanced regression techniques.
 We are analyzing the Boston Housing dataset for our STAT444 final project.
 
 ## Project Parts
